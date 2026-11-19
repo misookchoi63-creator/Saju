@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>나의 재물운 풀이</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#EDF0F4;--ink:#1B2A49;--soft:#5A6782;--line:#C9D0DC;--jade:#2F7F79;--seal:#B3362D;--card:#FAFBFC}
+@media (prefers-color-scheme:dark){:root{--paper:#141B2B;--ink:#E7EBF3;--soft:#9AA6BF;--line:#2C3750;--jade:#5FB3AB;--seal:#D8574D;--card:#1B2438}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:'Noto Serif KR',serif;line-height:1.8;padding:28px 18px 60px}
+main{max-width:560px;margin:0 auto}
+h1{font-size:30px;font-weight:800;line-height:1.35;margin:8px 0 6px;letter-spacing:-.02em}
+.sub{color:var(--soft);font-size:15px;margin:0 0 28px}
+form,.result{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:22px}
+label{display:block;font-size:14px;font-weight:600;margin:16px 0 6px}
+label:first-child{margin-top:0}
+input,select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.chk{display:flex;align-items:center;gap:8px;font-weight:400;margin-top:8px}
+.chk input{width:auto}
+.tier{display:flex;gap:10px;margin-top:6px}
+.tier label{flex:1;margin:0;border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-weight:400;cursor:pointer}
+.tier input{width:auto;margin-right:6px}
+.tier label:has(input:checked){border-color:var(--jade);background:var(--paper)}
+.tier b{display:block;font-weight:600}
+.tier small{color:var(--soft);font-size:12.5px;line-height:1.5;display:block}
+#codeWrap{display:none}
+button{width:100%;margin-top:22px;font:inherit;font-weight:800;font-size:17px;color:#fff;background:var(--seal);border:0;border-radius:4px;padding:14px;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
+.err{color:var(--seal);font-size:14px;margin-top:12px;min-height:1em}
+.result{display:none;margin-top:22px}
+.result h2{font-size:19px;margin:0 0 4px}
+.meta{color:var(--soft);font-size:13px;margin:0 0 16px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.body{white-space:pre-wrap;font-size:16px}
+.note{color:var(--soft);font-size:12.5px;margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>내 사주로 보는<br>재물운 풀이</h1>
+<p class="sub">생년월일과 태어난 시간을 입력하면 풀이를 만들어 드립니다.</p>
+
+<form id="f" novalidate>
+  <label for="name">이름 (또는 별명)</label>
+  <input id="name" required maxlength="20" autocomplete="off">
+
+  <label for="date">생년월일</label>
+  <div class="row">
+    <div><input id="date" type="date" required></div>
+    <div><select id="cal"><option value="양력">양력</option><option value="음력">음력</option><option value="음력(윤달)">음력 윤달</option></select></div>
+  </div>
+
+  <label for="time">태어난 시간</label>
+  <input id="time" type="time">
+  <label class="chk"><input id="unk" type="checkbox"> 태어난 시간을 몰라요</label>
+
+  <label for="sex">성별</label>
+  <select id="sex"><option>여성</option><option>남성</option></select>
+
+  <label for="topic">알고 싶은 주제</label>
+  <select id="topic">
+    <option>재물운</option><option>직업·사업운</option><option>부동산운</option>
+    <option>올해 월별 흐름</option><option>연애·궁합운</option>
+  </select>
+
+  <label>풀이 종류</label>
+  <div class="tier">
+    <label><input type="radio" name="tier" value="basic" checked><b>기본 풀이</b><small>핵심 요약, 무료</small></label>
+    <label><input type="radio" name="tier" value="full"><b>상세 풀이</b><small>월별 흐름·조언, 주문번호 필요</small></label>
+  </div>
+  <div id="codeWrap">
+    <label for="code">주문번호</label>
+    <input id="code" autocomplete="off" placeholder="구매 후 받은 번호">
+  </div>
+
+  <button id="go" type="submit">풀이 보기</button>
+  <div class="err" id="err" role="alert"></div>
+</form>
+
+<section class="result" id="out" aria-live="polite">
+  <h2 id="rt"></h2>
+  <p class="meta" id="rm"></p>
+  <div class="body" id="rb"></div>
+  <p class="note">사주 풀이는 오락과 참고용입니다. 투자, 의료, 법률 등 중요한 결정은 전문가와 상의하세요.</p>
+</section>
+</main>
+
+<script>
+/* ===== 설정 ===== */
+// 풀이를 만들어 주는 중계 서버(Cloudflare Worker) 주소.
+// 요청: POST {prompt:"..."}  →  응답: {text:"..."}  (기존 Worker 형식에 맞게 아래 callAI만 고치세요)
+const ENDPOINT = "https://misook.mschoi9557.workers.dev";
+// 상세 풀이를 열어 줄 주문번호 목록. 판매할 때마다 한 줄 추가하세요.
+const ORDER_CODES = ["TEST-0001"];
+/* ================ */
+
+const $ = id => document.getElementById(id);
+function showErr(m){ const e=$('err'); e.textContent=m; e.scrollIntoView({block:'center'}); }
+const tierEl = () => document.querySelector('input[name=tier]:checked').value;
+
+document.querySelectorAll('input[name=tier]').forEach(r => r.addEventListener('change', () => {
+  $('codeWrap').style.display = tierEl() === 'full' ? 'block' : 'none';
+}));
+$('unk').addEventListener('change', () => { $('time').disabled = $('unk').checked; });
+
+function buildPrompt(d) {
+  const full = d.tier === 'full';
+  return [
+    "당신은 한국 명리학(사주) 풀이 전문가입니다. 아래 정보로 사주 팔자를 세우고 풀이하세요.",
+    `이름: ${d.name} / 성별: ${d.sex} / 생년월일: ${d.date} (${d.cal}) / 태어난 시간: ${d.time}`,
+    `주제: ${d.topic}`,
+    "",
+    "작성 규칙:",
+    "- 먼저 사주 여덟 글자(연주·월주·일주·시주)를 한 줄로 밝히세요. 시간 모름이면 시주는 제외하고 세 기둥으로 풀이하세요.",
+    "- 한국어 존댓말, 따뜻하고 구체적인 문체. 소제목은 【 】로 표시, 마크다운 기호(#, *)는 쓰지 마세요.",
+    "- '반드시', '무조건', '100%' 같은 단정, 병이 낫는다거나 큰돈을 번다는 보장성 표현은 쓰지 마세요.",
+    "- 투자·도박·대출을 권하지 말고, 습관과 시기 활용 중심의 조언을 하세요.",
+    full
+      ? "- 분량: 1,500자 내외. 구성: 【타고난 재물 그릇】【돈이 들어오는 방식】【새는 구멍 주의점】【올해 월별 흐름(1~12월 한 줄씩)】【실천 조언 3가지】"
+      : "- 분량: 500자 내외. 구성: 【타고난 재물 그릇】【올해 한 줄 흐름】【한 가지 조언】. 마지막에 '상세 풀이에서는 월별 흐름을 볼 수 있어요'라고 안내하세요.",
+    `- 올해는 ${new Date().getFullYear()}년입니다.`
+  ].join("\n");
+}
+
+async function callAI(prompt) {
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({prompt})
+  });
+  if (!res.ok) throw new Error("서버 응답 오류 (" + res.status + ")");
+  const j = await res.json();
+  const text = j.text || j.result || j.answer ||
+    (j.candidates && j.candidates[0] && j.candidates[0].content.parts.map(p => p.text).join(""));
+  if (!text) throw new Error("풀이 내용이 비어 있습니다");
+  return text;
+}
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('err').textContent = "";
+  const d = {
+    name: $('name').value.trim(), date: $('date').value, cal: $('cal').value,
+    time: $('unk').checked || !$('time').value ? "모름" : $('time').value,
+    sex: $('sex').value, topic: $('topic').value, tier: tierEl()
+  };
+  const norm = s => s.toUpperCase().replace(/[\s\-]/g, "");
+  if (!d.name || !d.date) {
+    showErr("이름과 생년월일을 먼저 입력해 주세요.");
+    (d.name ? $('date') : $('name')).focus();
+    return;
+  }
+  if (d.tier === 'full' && !ORDER_CODES.map(norm).includes(norm($('code').value))) {
+    showErr("주문번호가 맞지 않습니다. 구매 내역의 번호를 다시 확인해 주세요.");
+    return;
+  }
+  const btn = $('go'); btn.disabled = true; btn.textContent = "풀이를 만드는 중…";
+  try {
+    const text = await callAI(buildPrompt(d));
+    $('rt').textContent = d.name + "님의 " + d.topic;
+    $('rm').textContent = d.date + " " + d.cal + " · " + (d.time === "모름" ? "시간 미상" : d.time) + " · " + d.sex + " · " + (d.tier === 'full' ? "상세 풀이" : "기본 풀이");
+    $('rb').textContent = text.trim();
+    $('out').style.display = 'block';
+    $('out').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+  } catch (x) {
+    showErr("풀이를 불러오지 못했어요: " + x.message + ". 잠시 후 다시 시도해 주세요.");
+  } finally {
+    btn.disabled = false; btn.textContent = "풀이 보기";
+  }
+});
+</script>
+</body>
+</html>
